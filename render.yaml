@@ -1,0 +1,25 @@
+# Render Blueprint — one free web service: Express API + built React app.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: smogsense
+    runtime: node
+    plan: free
+    region: singapore
+    # devDependencies (Vite) are needed to build the client.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      # Secrets: set these in the Render dashboard (never committed).
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false

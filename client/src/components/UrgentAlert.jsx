@@ -1,11 +1,10 @@
+import { URGENT_LEVEL } from '@smogsense/shared';
 import { useI18n } from '../i18n/I18nContext.jsx';
-
-/** AQI levels at or above this ("Very poor", "Severe") trigger the alert. */
-export const URGENT_LEVEL = 5;
 
 /**
  * Prominent safety banner for very poor / severe air.
  * @param {{ category: { key: string, level: number } }} props
+ * @returns {import('react').JSX.Element | null} alert, or nothing below "Very poor"
  */
 export function UrgentAlert({ category }) {
   const { t } = useI18n();

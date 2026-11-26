@@ -151,8 +151,16 @@ main:focus {
 }
 
 .header__title {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
   font-size: 1.6rem;
   margin: 0;
+}
+
+.header__logo {
+  flex: none;
+  border-radius: 8px;
 }
 
 .header__tagline {

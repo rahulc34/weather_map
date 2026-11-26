@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ApiError } from '../api/client.js';
 import { PlanView } from './PlanView.jsx';
 import { expectNoA11yViolations, renderWithI18n, samplePlanResponse } from '../test/utils.jsx';
 
@@ -91,7 +92,7 @@ describe('PlanView', () => {
     const onRetry = vi.fn();
     renderWithI18n(
       <PlanView
-        state={{ status: 'error', error: 'Too many requests.' }}
+        state={{ status: 'error', error: new ApiError('Too many requests.') }}
         onRetry={onRetry}
         onRegenerate={noop}
       />,

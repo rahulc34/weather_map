@@ -4,13 +4,16 @@
  */
 import { GoogleGenAI } from '@google/genai';
 
+export const GEMINI_API_VERSION = 'v1beta';
+
 /**
- * @param {{ apiKey: string, model: string, timeoutMs: number, client?: { models: { generateContent: Function } } }} options
+ * @param {{ apiKey: string, model: string, timeoutMs: number, client?: { models: { generateContent: (request: object) => Promise<{ text?: string }> } } }} options
  *   `client` can be injected for testing.
  * @returns {import('./index.js').LlmProvider}
  */
 export function createGeminiProvider({ apiKey, model, timeoutMs, client }) {
-  const ai = client ?? new GoogleGenAI({ apiKey });
+  // System instructions + JSON-schema output require the v1beta API surface.
+  const ai = client ?? new GoogleGenAI({ apiKey, apiVersion: GEMINI_API_VERSION });
 
   return {
     name: `gemini:${model}`,

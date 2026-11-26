@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react';
  * Used to avoid an API call on every keystroke in the city search.
  * @template T
  * @param {T} value
- * @param {number} [delayMs=400]
- * @returns {T}
+ * @param {number} [delayMs] quiet period in ms (defaults to 400)
+ * @returns {T} the debounced value
  */
 export function useDebouncedValue(value, delayMs = 400) {
   const [debounced, setDebounced] = useState(value);

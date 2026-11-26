@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ApiError } from '../api/client.js';
 import { AqiCard } from './AqiCard.jsx';
 import { UrgentAlert } from './UrgentAlert.jsx';
 import { expectNoA11yViolations, renderWithI18n, sampleAirQuality } from '../test/utils.jsx';
@@ -70,7 +71,10 @@ describe('AqiCard', () => {
   it('shows an error with a working retry button', async () => {
     const onRetry = vi.fn();
     renderWithI18n(
-      <AqiCard state={{ status: 'error', error: 'Data unavailable.' }} onRetry={onRetry} />,
+      <AqiCard
+        state={{ status: 'error', error: new ApiError('Data unavailable.') }}
+        onRetry={onRetry}
+      />,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('Data unavailable.');
     await userEvent.click(screen.getByRole('button', { name: /try again/i }));

@@ -36,7 +36,11 @@ export function loadConfig(env = process.env) {
   return Object.freeze(buildConfig(parsed.data));
 }
 
-/** @param {z.infer<typeof envSchema>} e */
+/**
+ * Shape validated env vars into the nested config object the app uses.
+ * @param {z.infer<typeof envSchema>} e validated environment
+ * @returns {object} configuration (frozen by the caller)
+ */
 function buildConfig(e) {
   const devOrigins = e.NODE_ENV === 'production' ? [] : ['http://localhost:5173'];
   const extraOrigins = e.ALLOWED_ORIGINS.split(',')

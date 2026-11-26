@@ -11,6 +11,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@smogsense/shared": "1.0.0",
     "@google/genai": "^3.6.1",
     "compression": "^1.8.2",
     "cors": "^2.8.6",

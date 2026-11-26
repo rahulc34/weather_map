@@ -27,30 +27,82 @@ const DEFAULT_CLIENT_DIST = path.resolve(
 /**
  * Wire the real services from configuration.
  * @param {ReturnType<typeof import('./config/index.js').loadConfig>} config
+ * @returns {{ airQualityService: ReturnType<typeof createAirQualityService>, assistantService: ReturnType<typeof createAssistantService> }} services
  */
 export function createServices(config) {
+  const { airQualityTtlMs, geocodeTtlMs, aiTtlMs, maxEntries } = config.cache;
   const airQualityService = createAirQualityService({
     ...config.openWeather,
-    ttlMs: config.cache.airQualityTtlMs,
-    geocodeTtlMs: config.cache.geocodeTtlMs,
-    maxEntries: config.cache.maxEntries,
+    ttlMs: airQualityTtlMs,
+    geocodeTtlMs,
+    maxEntries,
   });
   const assistantService = createAssistantService({
     llm: createLlmProvider(config.gemini),
     airQualityService,
-    ttlMs: config.cache.aiTtlMs,
-    maxEntries: config.cache.maxEntries,
+    ttlMs: aiTtlMs,
+    maxEntries,
   });
   return { airQualityService, assistantService };
 }
 
 /**
+ * Mount the JSON API with CORS, rate limits and a small body limit.
+ * @param {import('express').Express} app
+ * @param {ReturnType<typeof import('./config/index.js').loadConfig>} config
+ * @param {ReturnType<typeof createServices>} services
+ */
+function mountApi(app, config, services) {
+  const { windowMs, max, aiMax } = config.rateLimit;
+  const apiLimiter = createRateLimiter({
+    windowMs,
+    limit: max,
+    message: 'Too many requests. Please wait a few minutes and try again.',
+  });
+  const aiLimiter = createRateLimiter({
+    windowMs,
+    limit: aiMax,
+    message: 'You have reached the AI request limit. Please try again in a few minutes.',
+  });
+  app.use(
+    '/api',
+    ...restrictedCors(config.cors.allowedOrigins),
+    apiLimiter,
+    express.json({ limit: '10kb' }),
+    createApiRouter({ ...services, aiLimiter }),
+  );
+  app.use('/api', notFound);
+}
+
+/**
+ * Serve the built React app: hashed assets cached forever, SPA fallback to index.html.
+ * @param {import('express').Express} app
+ * @param {string} clientDist path to the Vite build output
+ */
+function mountClient(app, clientDist) {
+  if (!existsSync(clientDist)) return;
+  app.use(
+    '/assets',
+    express.static(path.join(clientDist, 'assets'), {
+      immutable: true,
+      maxAge: '1y',
+      index: false,
+    }),
+  );
+  app.use(express.static(clientDist, { index: false, maxAge: '1h' }));
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.set('Cache-Control', 'no-cache').sendFile(path.join(clientDist, 'index.html'));
+  });
+}
+
+/**
+ * Build the Express application.
  * @param {{
  *   config: ReturnType<typeof import('./config/index.js').loadConfig>,
  *   services?: ReturnType<typeof createServices>,
  *   clientDist?: string,
  * }} options
- * @returns {import('express').Express}
+ * @returns {import('express').Express} configured app (not yet listening)
  */
 export function createApp({
   config,
@@ -61,47 +113,10 @@ export function createApp({
   app.disable('x-powered-by');
   // Render (and most PaaS) terminate TLS at a single proxy hop.
   app.set('trust proxy', 1);
+  app.use(securityHeaders(), permissionsPolicy, compression());
 
-  app.use(securityHeaders());
-  app.use(permissionsPolicy);
-  app.use(compression());
-
-  const apiLimiter = createRateLimiter({
-    windowMs: config.rateLimit.windowMs,
-    limit: config.rateLimit.max,
-    message: 'Too many requests. Please wait a few minutes and try again.',
-  });
-  const aiLimiter = createRateLimiter({
-    windowMs: config.rateLimit.windowMs,
-    limit: config.rateLimit.aiMax,
-    message: 'You have reached the AI request limit. Please try again in a few minutes.',
-  });
-
-  app.use(
-    '/api',
-    ...restrictedCors(config.cors.allowedOrigins),
-    apiLimiter,
-    express.json({ limit: '10kb' }),
-    createApiRouter({ ...services, aiLimiter }),
-  );
-  app.use('/api', notFound);
-
-  // Serve the built React app (single deployable service).
-  if (existsSync(clientDist)) {
-    app.use(
-      '/assets',
-      express.static(path.join(clientDist, 'assets'), {
-        immutable: true,
-        maxAge: '1y',
-        index: false,
-      }),
-    );
-    app.use(express.static(clientDist, { index: false, maxAge: '1h' }));
-    // SPA fallback: any other GET returns index.html.
-    app.get(/^(?!\/api\/).*/, (_req, res) => {
-      res.set('Cache-Control', 'no-cache').sendFile(path.join(clientDist, 'index.html'));
-    });
-  }
+  mountApi(app, config, services);
+  mountClient(app, clientDist); // single deployable service
 
   app.use(notFound);
   app.use(errorHandler);

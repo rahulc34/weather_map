@@ -6,7 +6,10 @@ import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
 import { HttpError } from '../utils/httpError.js';
 
-/** Strict security headers with a CSP that only allows our own assets. */
+/**
+ * Strict security headers with a CSP that only allows our own assets.
+ * @returns {import('express').RequestHandler} helmet middleware
+ */
 export function securityHeaders() {
   return helmet({
     contentSecurityPolicy: {
@@ -44,6 +47,7 @@ export function permissionsPolicy(_req, res, next) {
  * Is this Origin header the server's own origin or explicitly allowed?
  * @param {import('express').Request} req
  * @param {string[]} allowedOrigins
+ * @returns {boolean} true when the request may proceed
  */
 export function isOriginAllowed(req, allowedOrigins) {
   const origin = req.get('origin');
@@ -81,6 +85,7 @@ export function restrictedCors(allowedOrigins) {
 
 /**
  * @param {{ windowMs: number, limit: number, message: string }} options
+ * @returns {import('express').RequestHandler} rate-limiting middleware
  */
 export function createRateLimiter({ windowMs, limit, message }) {
   return rateLimit({

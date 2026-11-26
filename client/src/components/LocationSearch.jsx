@@ -1,115 +1,99 @@
-import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { searchCities, errorMessage } from '../api/client.js';
-import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { forwardRef } from 'react';
+import { LIMITS } from '@smogsense/shared';
+import { errorMessage } from '../api/client.js';
+import { placeLabel, useCitySearch } from '../hooks/useCitySearch.js';
 import { useI18n } from '../i18n/I18nContext.jsx';
+import { getCurrentCoords } from '../utils/geolocation.js';
 
-const MIN_CHARS = 2;
+/**
+ * Translate the current search status into live-region text.
+ * @param {import('../hooks/useCitySearch.js').SearchStatus} status
+ * @param {number} resultCount
+ * @param {(key: string, vars?: object) => string} t
+ * @returns {string} status message ('' when there is nothing to announce)
+ */
+function statusMessage(status, resultCount, t) {
+  switch (status.kind) {
+    case 'searching':
+      return t('location.searching');
+    case 'locating':
+      return t('location.locating');
+    case 'results':
+      return t('location.results', { count: resultCount });
+    case 'empty':
+      return t('location.noResults');
+    case 'selected':
+      return t('location.selected', { name: status.name ?? t('location.current') });
+    default:
+      return '';
+  }
+}
 
-/** @param {{ name: string, state: string | null, country: string }} place */
-const placeLabel = (place) => [place.name, place.state, place.country].filter(Boolean).join(', ');
+/**
+ * Polite status line plus an assertive error line.
+ * @param {{ status: import('../hooks/useCitySearch.js').SearchStatus, resultCount: number }} props
+ * @returns {import('react').JSX.Element} status region
+ */
+function SearchStatusText({ status, resultCount }) {
+  const { t } = useI18n();
+  const isError = status.kind === 'error';
+  return (
+    <>
+      <p id="location-status" className="status-text" role="status" aria-live="polite">
+        {statusMessage(status, resultCount, t)}
+      </p>
+      {isError && (
+        <p className="field-error" role="alert">
+          {status.key ? t(status.key) : errorMessage(status.error, t)}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Matching places as a list of buttons.
+ * @param {{ places: { name: string, state: string | null, country: string, lat: number, lon: number }[], onChoose: (place: object) => void }} props
+ * @returns {import('react').JSX.Element | null} results list
+ */
+function PlaceResults({ places, onChoose }) {
+  const { t } = useI18n();
+  if (places.length === 0) return null;
+  return (
+    <ul className="results" aria-label={t('location.resultsLabel')}>
+      {places.map((place) => (
+        <li key={`${place.lat},${place.lon}`}>
+          <button type="button" className="results__btn" onClick={() => onChoose(place)}>
+            {placeLabel(place)}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * City search (debounced suggestions) + "Use my location" (browser geolocation).
- * @param {{ onSelect: (loc: { name: string, lat: number, lon: number }) => void }} props
+ * @param {{ onSelect: (location: { name: string, lat: number, lon: number }) => void }} props
+ * @param {import('react').Ref<HTMLInputElement>} inputRef
+ * @returns {import('react').JSX.Element} location card
  */
-export const LocationSearch = forwardRef(function LocationSearch({ onSelect }, inputRef) {
+function LocationSearchInner({ onSelect }, inputRef) {
   const { t } = useI18n();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [status, setStatus] = useState(
-    /** @type {{ kind: string, message?: string }} */ ({ kind: 'idle' }),
-  );
-  const debouncedQuery = useDebouncedValue(query.trim(), 400);
-  const abortRef = useRef(/** @type {AbortController | null} */ (null));
-  const skipNextSearch = useRef(false);
+  const search = useCitySearch(onSelect);
 
-  const runSearch = useCallback(
-    async (q) => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setStatus({ kind: 'searching' });
-      try {
-        const found = await searchCities(q, controller.signal);
-        setResults(found);
-        setStatus({ kind: found.length ? 'results' : 'empty' });
-      } catch (err) {
-        if (err?.name === 'AbortError') return;
-        setResults([]);
-        setStatus({ kind: 'error', message: errorMessage(err, t) });
-      }
-    },
-    [t],
-  );
-
-  // Debounced type-ahead search.
-  useEffect(() => {
-    if (skipNextSearch.current || debouncedQuery.length < MIN_CHARS) {
-      skipNextSearch.current = false;
-      return;
-    }
-    runSearch(debouncedQuery);
-  }, [debouncedQuery, runSearch]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  const handleChange = (e) => {
-    setQuery(e.target.value);
-    if (e.target.value.trim().length < MIN_CHARS) {
-      setResults([]);
-      setStatus({ kind: 'idle' });
+  const locateMe = async () => {
+    search.setStatus({ kind: 'locating' });
+    try {
+      search.chooseCoords(await getCurrentCoords());
+    } catch (err) {
+      search.setStatus({ kind: 'error', key: err.i18nKey });
     }
   };
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    const q = query.trim();
-    if (q.length < MIN_CHARS) {
-      setStatus({ kind: 'error', message: t('location.minChars') });
-      return;
-    }
-    runSearch(q);
+    search.submitQuery();
   };
-
-  const choose = (place) => {
-    const name = placeLabel(place);
-    skipNextSearch.current = true;
-    setQuery(name);
-    setResults([]);
-    setStatus({ kind: 'selected', message: t('location.selected', { name }) });
-    onSelect({ name, lat: place.lat, lon: place.lon });
-  };
-
-  const useMyLocation = () => {
-    if (!('geolocation' in navigator)) {
-      setStatus({ kind: 'error', message: t('location.geoUnsupported') });
-      return;
-    }
-    setStatus({ kind: 'locating' });
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setResults([]);
-        setStatus({
-          kind: 'selected',
-          message: t('location.selected', { name: t('location.current') }),
-        });
-        onSelect({ name: '', lat: coords.latitude, lon: coords.longitude });
-      },
-      (err) => {
-        const key = err.code === 1 ? 'location.geoDenied' : 'location.geoUnavailable';
-        setStatus({ kind: 'error', message: t(key) });
-      },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 10 * 60 * 1000 },
-    );
-  };
-
-  const statusText = {
-    searching: t('location.searching'),
-    locating: t('location.locating'),
-    results: t('location.results', { count: results.length }),
-    empty: t('location.noResults'),
-    selected: status.message,
-  }[status.kind];
 
   return (
     <section className="card" aria-labelledby="location-heading">
@@ -123,44 +107,26 @@ export const LocationSearch = forwardRef(function LocationSearch({ onSelect }, i
             type="text"
             inputMode="search"
             autoComplete="address-level2"
-            maxLength={80}
+            maxLength={LIMITS.cityQuery}
             placeholder={t('location.placeholder')}
-            value={query}
-            onChange={handleChange}
+            value={search.query}
+            onChange={(e) => search.changeQuery(e.target.value)}
             aria-describedby="location-status"
-            aria-invalid={status.kind === 'error' || undefined}
+            aria-invalid={search.status.kind === 'error' || undefined}
           />
           <button type="submit" className="btn">
             {t('location.search')}
           </button>
         </div>
       </form>
-
-      <button type="button" className="btn btn--secondary location-geo" onClick={useMyLocation}>
+      <button type="button" className="btn btn--secondary location-geo" onClick={locateMe}>
         <span aria-hidden="true">📍 </span>
         {t('location.useMine')}
       </button>
-
-      <p id="location-status" className="status-text" role="status" aria-live="polite">
-        {statusText ?? ''}
-      </p>
-      {status.kind === 'error' && (
-        <p className="field-error" role="alert">
-          {status.message}
-        </p>
-      )}
-
-      {results.length > 0 && (
-        <ul className="results" aria-label={t('location.resultsLabel')}>
-          {results.map((place) => (
-            <li key={`${place.lat},${place.lon}`}>
-              <button type="button" className="results__btn" onClick={() => choose(place)}>
-                {placeLabel(place)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <SearchStatusText status={search.status} resultCount={search.results.length} />
+      <PlaceResults places={search.results} onChoose={search.choosePlace} />
     </section>
   );
-});
+}
+
+export const LocationSearch = forwardRef(LocationSearchInner);

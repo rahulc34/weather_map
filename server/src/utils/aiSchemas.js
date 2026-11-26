@@ -6,10 +6,11 @@
  *    model's output must never be trusted blindly.
  */
 import { z } from 'zod';
+import { CONFIDENCE_LEVELS, IMPACT_TYPES } from '@smogsense/shared';
+import { summarizeIssues } from './zodIssues.js';
 
-const IMPACT_TYPES = ['exposure', 'emissions', 'both'];
-const CONFIDENCE = ['low', 'medium', 'high'];
 const MAX_ITEMS = 6;
+const MAX_URGENT_ITEMS = 5;
 
 const suggestionJsonSchema = {
   type: 'object',
@@ -30,7 +31,7 @@ const suggestionJsonSchema = {
           description:
             'Approximate, honestly-labelled quantitative estimate (e.g. "~30–50% lower PM2.5 indoors"), or "Not quantifiable".',
         },
-        confidence: { type: 'string', enum: CONFIDENCE },
+        confidence: { type: 'string', enum: CONFIDENCE_LEVELS },
       },
       required: ['reduces', 'explanation', 'estimate', 'confidence'],
     },
@@ -53,7 +54,7 @@ export const PLAN_JSON_SCHEMA = {
     urgentPrecautions: {
       type: 'array',
       items: { type: 'string' },
-      maxItems: 5,
+      maxItems: MAX_URGENT_ITEMS,
       description: 'Only for very poor/severe air or vulnerable members; otherwise empty.',
     },
     dailyRoutine: suggestionList,
@@ -96,10 +97,10 @@ const suggestionSchema = z.object({
   details: text(600),
   timing: z.string().trim().max(80).default(''),
   impact: z.object({
-    reduces: z.enum(IMPACT_TYPES),
+    reduces: z.enum([...IMPACT_TYPES]),
     explanation: text(400),
     estimate: text(160),
-    confidence: z.enum(CONFIDENCE),
+    confidence: z.enum([...CONFIDENCE_LEVELS]),
   }),
 });
 
@@ -113,7 +114,7 @@ export const planResponseSchema = z.object({
   urgentPrecautions: z
     .array(text(300))
     .default([])
-    .transform((a) => a.slice(0, 5)),
+    .transform((a) => a.slice(0, MAX_URGENT_ITEMS)),
   dailyRoutine: suggestionArray,
   indoorHacks: suggestionArray,
   sustainableAlternatives: suggestionArray,
@@ -130,7 +131,7 @@ export const chatResponseSchema = z.object({
  * @template T
  * @param {string | undefined} raw model output
  * @param {z.ZodType<T>} schema
- * @returns {T}
+ * @returns {T} the validated data
  * @throws {Error} when the output is not valid JSON or fails the schema
  */
 export function parseModelJson(raw, schema) {
@@ -147,9 +148,8 @@ export function parseModelJson(raw, schema) {
   }
   const result = schema.safeParse(data);
   if (!result.success) {
-    const paths = result.error.issues
-      .slice(0, 5)
-      .map((i) => i.path.join('.') || '(root)')
+    const paths = summarizeIssues(result.error)
+      .map((issue) => issue.field)
       .join(', ');
     throw new Error(`Model response failed schema validation at: ${paths}`);
   }

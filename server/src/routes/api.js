@@ -17,6 +17,7 @@ import {
  *   assistantService: ReturnType<typeof import('../services/assistantService.js').createAssistantService>,
  *   aiLimiter: import('express').RequestHandler,
  * }} deps
+ * @returns {import('express').Router} router mounted at /api
  */
 export function createApiRouter({ airQualityService, assistantService, aiLimiter }) {
   const router = Router();

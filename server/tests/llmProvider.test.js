@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGeminiProvider } from '../src/services/llm/geminiProvider.js';
+import { GEMINI_API_VERSION, createGeminiProvider } from '../src/services/llm/geminiProvider.js';
 import { createLlmProvider } from '../src/services/llm/index.js';
 
 describe('createLlmProvider', () => {
@@ -12,6 +12,10 @@ describe('createLlmProvider', () => {
   it('returns a Gemini provider with a key', () => {
     const provider = createLlmProvider({ apiKey: 'k', model: 'gemini-2.5-flash', timeoutMs: 1000 });
     expect(provider.name).toBe('gemini:gemini-2.5-flash');
+  });
+
+  it('targets the v1beta API (required for system instructions + JSON schema)', () => {
+    expect(GEMINI_API_VERSION).toBe('v1beta');
   });
 });
 

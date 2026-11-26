@@ -16,7 +16,10 @@ const server = createApp({ config }).listen(config.port, () => {
   logger.info('SmogSense server listening', { port: config.port, env: config.env });
 });
 
-/** Graceful shutdown for platform restarts / deploys. */
+/**
+ * Graceful shutdown for platform restarts / deploys.
+ * @param {string} signal the OS signal that triggered shutdown
+ */
 function shutdown(signal) {
   logger.info('Shutting down', { signal });
   server.close(() => process.exit(0));

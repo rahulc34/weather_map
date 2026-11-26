@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DEFAULT_PROFILE, ProfileForm } from './ProfileForm.jsx';
+import { DEFAULT_PROFILE } from '@smogsense/shared';
+import { ProfileForm } from './ProfileForm.jsx';
 import { expectNoA11yViolations, renderWithI18n } from '../test/utils.jsx';
 
 const setup = (props = {}) => {

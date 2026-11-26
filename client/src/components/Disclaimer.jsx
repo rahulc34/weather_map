@@ -1,6 +1,9 @@
 import { useI18n } from '../i18n/I18nContext.jsx';
 
-/** Medical / AI disclaimer shown in the page footer. */
+/**
+ * Medical / AI disclaimer shown in the page footer.
+ * @returns {import('react').JSX.Element} footer
+ */
 export function Disclaimer() {
   const { t } = useI18n();
   return (

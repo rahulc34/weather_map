@@ -1,23 +1,28 @@
 /**
  * Request validation schemas (zod). Everything that comes from the client is
  * parsed here; route handlers only ever see validated, typed data.
+ * Allowed values and limits come from the shared package, so the client form
+ * and the server can never disagree.
  */
 import { z } from 'zod';
+import {
+  COMMUTE_MODES,
+  COOKING_FUELS,
+  DEFAULT_PROFILE,
+  EQUIPMENT_FLAGS,
+  HEATING_TYPES,
+  HOUSEHOLD_MEMBERS,
+  LANGUAGES,
+  LIMITS,
+} from '@smogsense/shared';
 
-/** Limits shared with the client-side form (kept small on purpose). */
-export const LIMITS = Object.freeze({
-  cityQuery: 80,
-  notes: 300,
-  question: 500,
-  historyItems: 6,
-  historyText: 1000,
-});
+const MIN_TEXT_LENGTH = 2;
 
 /**
  * Strip control characters and the angle brackets we use as prompt delimiters,
  * collapse whitespace and trim. Applied to every free-text field.
  * @param {string} value
- * @returns {string}
+ * @returns {string} sanitised text
  */
 export function sanitizeText(value) {
   return (
@@ -30,6 +35,11 @@ export function sanitizeText(value) {
   );
 }
 
+/**
+ * Free text that is sanitised, then length-checked.
+ * @param {number} max maximum length after sanitising
+ * @returns {z.ZodType<string>} schema
+ */
 const safeText = (max) =>
   z
     .string()
@@ -37,20 +47,29 @@ const safeText = (max) =>
     .transform(sanitizeText)
     .pipe(z.string().max(max));
 
+/**
+ * Whether a string is a time zone the runtime recognises.
+ * @param {string} tz
+ * @returns {boolean} true for valid IANA zones
+ */
+function isValidTimeZone(tz) {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Valid IANA time zone, falling back to UTC for anything unknown. */
-const timeZone = z
+const timeZoneSchema = z
   .string()
   .max(64)
   .optional()
-  .transform((tz) => {
-    if (!tz) return 'UTC';
-    try {
-      new Intl.DateTimeFormat('en', { timeZone: tz });
-      return tz;
-    } catch {
-      return 'UTC';
-    }
-  });
+  .transform((tz) => (tz && isValidTimeZone(tz) ? tz : 'UTC'));
+
+const booleanFlags = (keys, defaults) =>
+  Object.fromEntries(keys.map((key) => [key, z.boolean().default(defaults[key])]));
 
 export const coordinatesSchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -58,65 +77,50 @@ export const coordinatesSchema = z.object({
 });
 
 export const geocodeQuerySchema = z.object({
-  q: safeText(LIMITS.cityQuery).pipe(z.string().min(2, 'Enter at least 2 characters')),
+  q: safeText(LIMITS.cityQuery).pipe(
+    z.string().min(MIN_TEXT_LENGTH, 'Enter at least 2 characters'),
+  ),
 });
 
-export const languageSchema = z.enum(['en', 'hi']).default('en');
+export const languageSchema = z.enum([...LANGUAGES]).default('en');
 
 export const profileSchema = z
   .object({
     household: z
-      .object({
-        children: z.boolean().default(false),
-        elderly: z.boolean().default(false),
-        respiratory: z.boolean().default(false),
-        heart: z.boolean().default(false),
-        pregnant: z.boolean().default(false),
-      })
+      .object(booleanFlags(HOUSEHOLD_MEMBERS, DEFAULT_PROFILE.household))
       .strict()
       // prefault (not default) so the inner field defaults are applied too.
       .prefault({}),
-    commute: z
-      .enum(['walk', 'cycle', 'two_wheeler', 'car', 'public_transport', 'none'])
-      .default('none'),
-    cookingFuel: z.enum(['lpg', 'piped_gas', 'electric', 'biomass', 'kerosene']).default('lpg'),
-    heating: z.enum(['none', 'electric', 'gas', 'wood_coal', 'heat_pump']).default('none'),
-    hasAirPurifier: z.boolean().default(false),
-    hasPlants: z.boolean().default(false),
-    worksFromHome: z.boolean().default(false),
+    commute: z.enum([...COMMUTE_MODES]).default(DEFAULT_PROFILE.commute),
+    cookingFuel: z.enum([...COOKING_FUELS]).default(DEFAULT_PROFILE.cookingFuel),
+    heating: z.enum([...HEATING_TYPES]).default(DEFAULT_PROFILE.heating),
+    ...booleanFlags(EQUIPMENT_FLAGS, DEFAULT_PROFILE),
     notes: safeText(LIMITS.notes).default(''),
   })
   .strict();
 
-const locationName = safeText(120).optional();
+/** Fields shared by every AI request: where, who, and in which language. */
+const assistantContextShape = {
+  lat: coordinatesSchema.shape.lat,
+  lon: coordinatesSchema.shape.lon,
+  locationName: safeText(LIMITS.locationName).optional(),
+  lang: languageSchema,
+  timeZone: timeZoneSchema,
+  profile: profileSchema,
+};
 
-export const planRequestSchema = z
-  .object({
-    lat: coordinatesSchema.shape.lat,
-    lon: coordinatesSchema.shape.lon,
-    locationName,
-    lang: languageSchema,
-    timeZone,
-    profile: profileSchema,
-  })
+const chatTurnSchema = z
+  .object({ role: z.enum(['user', 'assistant']), text: safeText(LIMITS.historyText) })
   .strict();
+
+export const planRequestSchema = z.object(assistantContextShape).strict();
 
 export const chatRequestSchema = z
   .object({
-    lat: coordinatesSchema.shape.lat,
-    lon: coordinatesSchema.shape.lon,
-    locationName,
-    lang: languageSchema,
-    timeZone,
-    profile: profileSchema,
-    question: safeText(LIMITS.question).pipe(z.string().min(2, 'Question is too short')),
-    history: z
-      .array(
-        z
-          .object({ role: z.enum(['user', 'assistant']), text: safeText(LIMITS.historyText) })
-          .strict(),
-      )
-      .max(LIMITS.historyItems)
-      .default([]),
+    ...assistantContextShape,
+    question: safeText(LIMITS.question).pipe(
+      z.string().min(MIN_TEXT_LENGTH, 'Question is too short'),
+    ),
+    history: z.array(chatTurnSchema).max(LIMITS.historyItems).default([]),
   })
   .strict();

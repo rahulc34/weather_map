@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Chat from './Chat.jsx';
-import { DEFAULT_PROFILE } from './ProfileForm.jsx';
+import { DEFAULT_PROFILE } from '@smogsense/shared';
 import { expectNoA11yViolations, jsonResponse, mockFetch, renderWithI18n } from '../test/utils.jsx';
 
 const LOCATION = { name: 'Delhi', lat: 28.65, lon: 77.22 };

@@ -102,19 +102,26 @@ flowchart LR
 
 ```
 smogsense/
+├─ shared/                # @smogsense/shared — constants used by BOTH server and client
+│  └─ src/index.js        # languages, profile options, limits, AQI/plan vocabulary
 ├─ server/
 │  ├─ src/
 │  │  ├─ config/          # validated env config (zod)
 │  │  ├─ middleware/      # security, validation, error handling
 │  │  ├─ routes/          # thin API handlers
-│  │  ├─ services/        # airQuality, assistant, promptBuilder, fallbackPlan, llm/
-│  │  ├─ utils/           # aqi maths, cache, schemas, logger, errors
+│  │  ├─ services/        # openWeatherClient, airQualityMappers (pure), airQualityService,
+│  │  │                   # assistantService, promptBuilder, fallbackPlan/Content, llm/
+│  │  ├─ utils/           # aqi maths, cache, validation & AI schemas, logger, errors
 │  │  ├─ app.js           # app factory (dependency-injectable)
 │  │  └─ index.js         # entry point
 │  └─ tests/              # Vitest + Supertest (no network)
 ├─ client/
 │  └─ src/
-│     ├─ api/  components/  hooks/  i18n/  styles/  utils/
+│     ├─ api/             # fetch wrapper, ApiError, shared request payload
+│     ├─ hooks/           # useAssistantFlow, useAsyncState, useAbortableRequest, useCitySearch, useChat…
+│     ├─ components/      # small presentational components (App is layout only)
+│     ├─ i18n/            # en.js / hi.js (key parity enforced by tests)
+│     ├─ styles/  utils/
 │     └─ test/            # RTL setup + axe helper
 ├─ .github/workflows/ci.yml
 ├─ render.yaml
@@ -127,10 +134,13 @@ smogsense/
 
 ### 1. Code quality
 
-- Clear separation of concerns: **routes → services → utils**. Handlers are 2–3 lines and services are pure or dependency-injected.
-- Centralised **config** ([`config/index.js`](server/src/config/index.js), zod-validated) and **error handling** ([`errorHandler.js`](server/src/middleware/errorHandler.js)).
-- **JSDoc** on all key functions. Small, single-purpose modules.
-- **ESLint 9** (recommended + React + hooks + **jsx-a11y strict**) and **Prettier**. Both are enforced in CI with zero warnings.
+- **Quality is enforced, not just claimed.** [`eslint.config.js`](eslint.config.js) fails the build when a source function is over **60 lines**, has **cyclomatic complexity > 10**, more than **4 parameters**, nesting deeper than 3, nested ternaries, shadowed variables or reassigned parameters. Currently: **0 errors, 0 warnings**.
+- **Complete JSDoc, verified by lint**: `eslint-plugin-jsdoc` requires a JSDoc block with `@param` and `@returns` on every exported function, hook and component, and checks that the types are valid.
+- **No duplication across the stack**: a `shared/` workspace package is the single source of truth for languages, profile options, limits, pollutants, AQI levels and plan sections. Server validation and the client form import the same constants, and a contract test proves the server defaults equal the client's `DEFAULT_PROFILE`.
+- Clear separation of concerns: **routes → services → utils** on the server. OpenWeather I/O ([`openWeatherClient.js`](server/src/services/openWeatherClient.js)) is split from pure mapping ([`airQualityMappers.js`](server/src/services/airQualityMappers.js)). Plan and chat share **one** AI pipeline driven by task descriptors ([`assistantService.js`](server/src/services/assistantService.js)).
+- On the client, logic lives in **custom hooks**: `useAssistantFlow`, `useAsyncState`, `useAbortableRequest`, `useCitySearch` and `useChat`. Components are small and presentational, and `App` is layout only.
+- Centralised **config** ([`config/index.js`](server/src/config/index.js), zod-validated) and **error handling** ([`errorHandler.js`](server/src/middleware/errorHandler.js)). Consistent naming: `createX` factories, `useX` hooks, `toX` mappers, `buildX` builders.
+- **ESLint 9** (React, hooks, **jsx-a11y strict**, jsdoc) and **Prettier**, both enforced in CI.
 
 ### 2. Security
 
@@ -151,9 +161,9 @@ smogsense/
 
 ### 4. Testing
 
-- **178 automated tests** (Vitest), with no network calls in tests.
-  - **Server (116):** AQI maths, cache (TTL/LRU/dedupe), input validation, prompt builder (injection containment), AI response parsing, OpenWeather service (mocked fetch), assistant service (mocked LLM, fallbacks), Gemini provider, config, and **Supertest integration** for every route covering CORS, rate limits, body limits, error hiding and SPA hosting.
-  - **Client (62):** React Testing Library tests for the profile form, AQI card, plan rendering (including an HTML-injection test), location search (debounce, geolocation allowed/denied/unsupported), chat, error and loading states, a full App flow, and **axe-core accessibility checks** on every main component and the full page.
+- **191 automated tests** (Vitest), with no network calls in tests.
+  - **Server (128):** AQI maths, OpenWeather mappers, client/server contract, cache (TTL/LRU/dedupe), input validation, prompt builder (injection containment), AI response parsing, OpenWeather service (mocked fetch), assistant service (mocked LLM, fallbacks), Gemini provider, config, and **Supertest integration** for every route covering CORS, rate limits, body limits, error hiding and SPA hosting.
+  - **Client (63):** React Testing Library tests for the profile form, AQI card, plan rendering (including an HTML-injection test), location search (debounce, geolocation allowed/denied/unsupported), chat, error and loading states, a full App flow, and **axe-core accessibility checks** on every main component and the full page.
 - Coverage is about **97% of statements** on both server and client.
 - `npm test` at the root runs everything. **GitHub Actions** runs lint, format check, tests with coverage, build and audit on every push.
 

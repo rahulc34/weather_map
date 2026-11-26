@@ -62,7 +62,7 @@ export const AQI_CATEGORIES = Object.freeze([
 ]);
 
 /** Levels at or above this are "very poor"/"severe" and trigger urgent guidance. */
-export const URGENT_LEVEL = 5;
+export { URGENT_LEVEL } from '@smogsense/shared';
 
 const OWM_INDEX_LABELS = ['Good', 'Fair', 'Moderate', 'Poor', 'Very poor'];
 
@@ -128,7 +128,7 @@ const HOUR_MS = 60 * 60 * 1000;
  * Find the cleanest and dirtiest contiguous windows in an hourly forecast.
  * `end` is exclusive (one hour after the last hourly sample in the window).
  * @param {{ time: string, aqi: number }[]} hourly chronologically sorted, ISO times
- * @param {number} [windowHours=3]
+ * @param {number} [windowHours] window length in hours (defaults to 3)
  * @returns {{ best: { start: string, end: string, avgAqi: number }, worst: { start: string, end: string, avgAqi: number } } | null}
  */
 export function findForecastWindows(hourly, windowHours = 3) {

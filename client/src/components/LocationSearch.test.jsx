@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LocationSearch } from './LocationSearch.jsx';
+import { LanguageToggle } from './LanguageToggle.jsx';
 import { expectNoA11yViolations, jsonResponse, mockFetch, renderWithI18n } from '../test/utils.jsx';
 
 const DELHI = { name: 'Delhi', state: 'Delhi', country: 'IN', lat: 28.65, lon: 77.22 };
@@ -40,6 +41,26 @@ describe('LocationSearch', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Showing air quality for Delhi, Delhi, IN',
     );
+  });
+
+  it('does not re-run the search when the language changes', async () => {
+    const fetchMock = mockFetch(() => jsonResponse({ results: [DELHI] }));
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    renderWithI18n(
+      <>
+        <LanguageToggle />
+        <LocationSearch onSelect={onSelect} />
+      </>,
+    );
+    await user.type(screen.getByLabelText('City name'), 'Delhi');
+    await user.click(await screen.findByRole('button', { name: 'Delhi, Delhi, IN' }));
+    await user.click(screen.getByRole('button', { name: 'हिन्दी' }));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Delhi, Delhi, IN' })).not.toBeInTheDocument();
+    // The status message is re-translated, not left in English.
+    expect(screen.getByRole('status')).toHaveTextContent('Delhi, Delhi, IN की वायु गुणवत्ता');
   });
 
   it('reports no results', async () => {

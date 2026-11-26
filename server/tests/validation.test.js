@@ -7,6 +7,7 @@ import {
   profileSchema,
   sanitizeText,
 } from '../src/utils/validation.js';
+import { DEFAULT_PROFILE } from '@smogsense/shared';
 import { validProfile } from './fixtures.js';
 
 describe('sanitizeText', () => {
@@ -49,7 +50,7 @@ describe('geocodeQuerySchema', () => {
 describe('profileSchema', () => {
   it('fills defaults for an empty profile', () => {
     const p = profileSchema.parse({});
-    expect(p.commute).toBe('none');
+    expect(p.commute).toBe(DEFAULT_PROFILE.commute);
     expect(p.household.children).toBe(false);
     expect(p.notes).toBe('');
   });

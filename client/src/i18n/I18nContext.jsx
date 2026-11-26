@@ -11,6 +11,7 @@ const STORAGE_KEY = 'smogsense.lang';
  * @param {'en'|'hi'} lang
  * @param {string} key
  * @param {Record<string, string | number>} [vars]
+ * @returns {any} translated string (or the raw array/object for list entries)
  */
 export function translate(lang, key, vars) {
   const value = key.split('.').reduce((node, part) => node?.[part], STRINGS[lang]);
@@ -19,6 +20,10 @@ export function translate(lang, key, vars) {
   return value.replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match));
 }
 
+/**
+ * Saved language, else the browser's preference.
+ * @returns {'en'|'hi'} initial language
+ */
 function initialLang() {
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -32,6 +37,8 @@ function initialLang() {
 /**
  * Provides the current language, a setter and the `t` helper.
  * Keeps <html lang> in sync so screen readers use the right voice.
+ * @param {{ children: import('react').ReactNode, initial?: 'en'|'hi' }} props
+ * @returns {import('react').JSX.Element} provider
  */
 export function I18nProvider({ children, initial }) {
   const [lang, setLangState] = useState(() => initial ?? initialLang());

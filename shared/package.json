@@ -1,0 +1,11 @@
+{
+  "name": "@smogsense/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Constants shared by the SmogSense server and client.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  }
+}
